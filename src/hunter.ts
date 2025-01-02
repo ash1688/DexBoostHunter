@@ -55,6 +55,8 @@ async function initializedDiscord(): Promise<boolean> {
 
       if (botChannel) {
         console.log("✅ Discord bot is ready.");
+        const welcome = `🚀 Hunter is now running`;
+        botChannel.send(welcome).catch(console.error);
       } else {
         console.log("❌ Discord bot channel not found or is not a TextChannel.");
         return false;
@@ -76,7 +78,7 @@ async function main() {
     console.clear();
     const discordInit = await initializedDiscord();
     if (discordInit) console.log("Discord function succesfully called.");
-    console.log("🚀 Hunter is now running.");
+    console.log("🚀 Hunter is now running.");    
   }
 
   // Get endpoints

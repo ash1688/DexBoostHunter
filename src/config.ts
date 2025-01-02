@@ -1,3 +1,5 @@
+import { verbose } from "sqlite3";
+
 export const config = {
   settings: {
     db_name_tracker: "src/data/main.db", // Sqlite Database location
@@ -36,4 +38,9 @@ export const config = {
     enabled: true, // if set to false, the rugcheck will not be included in the response
     verbose_log: false,
   },
+  discord: {
+    enable_node_log: true, // if set to false, the node log will not be included in the response
+    enabled: true, //if set to true , and .env file is set up, the bot will send messages to discord
+    verbose_log: false,
+  }
 };

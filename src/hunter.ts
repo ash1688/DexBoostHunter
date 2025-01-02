@@ -6,6 +6,8 @@ import { RugResponse, TokenResponseType, detailedTokenResponseType, dexEndpoint,
 import { selectTokenBoostAmounts, upsertTokenBoost } from "./db";
 import chalk from "chalk";
 import { getRugCheck } from "./transactions";
+import { url } from "inspector";
+import { Client, Events, GatewayIntentBits, EmbedBuilder } from "discord.js";
 
 // Load environment variables from the .env file
 dotenv.config();
@@ -21,12 +23,61 @@ export async function getEndpointData(url: string): Promise<false | any> {
   return tokens.data;
 }
 
+// Discord
+let discordClient: any = null;
+let botChannel: any = null;
+
+async function initializedDiscord(): Promise<boolean> {
+  //check if Discord is enabled
+  if (!config.discord.enabled) {
+    console.log("❌ Discord intergration is disbled in the config.");
+    return true;
+  }
+
+  const discordBotToken = process.env.DISCORD_BOT_TOKEN || "";
+  const discordChannelId = process.env.DISCORD_TOKEN_HUNTER_CHANNEL || "";
+
+  if (!discordBotToken || !discordChannelId) {
+    console.log("🛑 Discord bot token or channel id not provided in the .env file.");
+    return false;
+  }
+
+  try {
+    //Initialize and log in the discord client
+    discordClient = new Client({
+      intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
+    });
+    await discordClient.login(discordBotToken);
+
+    discordClient.on(Events.ClientReady, () => {
+      //fetch the bot channel
+      botChannel = discordClient.channels.cache.get(discordChannelId);
+
+      if (botChannel) {
+        console.log("✅ Discord bot is ready.");
+      } else {
+        console.log("❌ Discord bot channel not found or is not a TextChannel.");
+        return false;
+      }
+    });
+
+    return true;
+  } catch (error) {
+    console.log("❌ Error initializing Discord bot.");
+    return false;
+  }
+}
+
 // Start requesting data
 let firstRun = true;
 async function main() {
   // First run logic
-  if (firstRun) console.clear();
-  if (firstRun) console.log("Started. Waiting for tokens...");
+  if (firstRun) {
+    console.clear();
+    const discordInit = await initializedDiscord();
+    if (discordInit) console.log("Discord function succesfully called.");
+    console.log("🚀 Hunter is now running.");
+  }
 
   // Get endpoints
   const endpoints = config.dex.endpoints || "";
@@ -171,28 +222,111 @@ async function main() {
                   const timeAgo = updatedTokenProfile.pairCreatedAt ? DateTime.fromMillis(updatedTokenProfile.pairCreatedAt).toRelative() : "N/A";
 
                   // Console Log
-                  console.log("\n\n[ Boost Information ]");
-                  console.log(`✅ ${updatedTokenProfile.amount} boosts added for ${updatedTokenProfile.tokenName} (${updatedTokenProfile.tokenSymbol}).`);
-                  console.log(goldenTickerColor(`${goldenTicker} Boost Amount: ${updatedTokenProfile.totalAmount}`));
-                  console.log("[ Token Information ]");
-                  console.log(socialsColor(`${socialsIcon} This token has ${socialLenght} socials.`));
-                  console.log(
-                    `🕝 This token pair was created ${timeAgo} and has ${updatedTokenProfile.pairsAvailable} pairs available including ${updatedTokenProfile.dexPair}`
-                  );
-                  console.log(`🤑 Current Price: $${updatedTokenProfile.currentPrice}`);
-                  console.log(`📦 Current Mkt Cap: $${updatedTokenProfile.marketCap}`);
-                  console.log(`💦 Current Liquidity: $${updatedTokenProfile.liquidity}`);
-                  console.log(`🚀 Pumpfun token: ${pumpfunIcon} ${isPumpFun}`);
-                  if (rugCheckResults.length !== 0) {
-                    console.log("[ Rugcheck Result   ]");
-                    rugCheckResults.forEach((risk) => {
-                      console.log(risk);
-                    });
+                  if(config.discord.enable_node_log) {
+                    console.log("\n\n[ Boost Information ]");
+                    console.log(`✅ ${updatedTokenProfile.amount} boosts added for ${updatedTokenProfile.tokenName} (${updatedTokenProfile.tokenSymbol}).`);
+                    console.log(goldenTickerColor(`${goldenTicker} Boost Amount: ${updatedTokenProfile.totalAmount}`));
+                    console.log("[ Token Information ]");
+                    console.log(socialsColor(`${socialsIcon} This token has ${socialLenght} socials.`));
+                    console.log(
+                      `🕝 This token pair was created ${timeAgo} and has ${updatedTokenProfile.pairsAvailable} pairs available including ${updatedTokenProfile.dexPair}`
+                    );
+                    console.log(`🤑 Current Price: $${updatedTokenProfile.currentPrice}`);
+                    console.log(`📦 Current Mkt Cap: $${updatedTokenProfile.marketCap}`);
+                    console.log(`💦 Current Liquidity: $${updatedTokenProfile.liquidity}`);
+                    console.log(`🚀 Pumpfun token: ${pumpfunIcon} ${isPumpFun}`);
+                    if (rugCheckResults.length !== 0) {
+                      console.log("[ Rugcheck Result   ]");
+                      rugCheckResults.forEach((risk) => {
+                        console.log(risk);
+                      });
+                    }
+                    console.log("[ Checkout Token    ]");
+                    console.log(`👀 View on Dex https://dexscreener.com/${updatedTokenProfile.chainId}/${updatedTokenProfile.tokenAddress}`);
+                    console.log(`🟣 Buy via Nova https://t.me/TradeonNovaBot?start=r-digitalbenjamins-${updatedTokenProfile.tokenAddress}`);
+                    console.log(`👽 Buy via GMGN https://gmgn.ai/sol/token/${updatedTokenProfile.tokenAddress}`);
                   }
-                  console.log("[ Checkout Token    ]");
-                  console.log(`👀 View on Dex https://dexscreener.com/${updatedTokenProfile.chainId}/${updatedTokenProfile.tokenAddress}`);
-                  console.log(`🟣 Buy via Nova https://t.me/TradeonNovaBot?start=r-digitalbenjamins-${updatedTokenProfile.tokenAddress}`);
-                  console.log(`👽 Buy via GMGN https://gmgn.ai/sol/token/${updatedTokenProfile.tokenAddress}`);
+
+                  // Discord Log
+                  if(config.discord.enabled && discordClient && botChannel) {
+                      const novaLink = `[Open Nova](<https://t.me/TradeonNovaBot?start=${config.bots[0].referral}-${updatedTokenProfile.tokenAddress}>)`;
+                      const gmgnLink = `[Open GMGN](<https://gmgn.ai/sol/token/${updatedTokenProfile.tokenAddress}>)`;
+                      const dexLink = `[Open Dex](<https://dexscreener.com/${updatedTokenProfile.chainId}/${updatedTokenProfile.tokenAddress}>)`;
+
+                      const embed = new EmbedBuilder()
+                        .setColor('#00ff00')
+                        .setAuthor({
+                            name: `${tokenName} (${tokenSymbol})\n✅ Boosts Added: ${updatedTokenProfile.amount}\n ${goldenTicker} Boost Amount: ${updatedTokenProfile.totalAmount}`,
+                            iconURL: updatedTokenProfile.icon,                            
+                            url: updatedTokenProfile.url,
+                        })
+                        .setDescription("\u200b \nDescription: " + updatedTokenProfile.description + "\n\u200b")
+                        .addFields(
+                          {name: "🤑 Current Price", value: `$${updatedTokenProfile.currentPrice}`, inline: true},
+                          {name: "📦 Market Cap", value: `$${updatedTokenProfile.marketCap}`, inline: true},
+                          {
+                            name: "💦 Current Liquidity",
+                            value: `$${updatedTokenProfile.liquidity}`,
+                            inline: true,
+                          },
+                          {
+                            name: "Pumpfun Token",
+                            value: `${pumpfunIcon} ${isPumpFun}`,
+                            inline: true,
+                          },
+                          {
+                            name: "Socials",
+                            value: `${socialsIcon} ${socialLenght} socials`,
+                            inline: true,
+                          },
+                          {
+                            name: "Pairs Available",
+                            value: `${updatedTokenProfile.pairsAvailable} pairs available`,
+                            inline: true,
+                          },
+                          {
+                            name: "Pair Created",
+                            value: `${timeAgo}`,
+                            inline: true,
+                          },
+                          {
+                            name: "\u200b \nRugcheck Results",
+                            value: rugCheckResults.map((risk) => risk).join("\n"),
+                            inline: false,
+                          },
+                          {
+                            name: "\u200b \n🟣 Buy via Nova",
+                            value: novaLink,
+                            inline: false,
+                          },
+                          {
+                            name: "👽 Buy via GMGN",
+                            value: gmgnLink,
+                            inline: false,
+                          },
+                          {
+                            name: "👀 View on Dex",
+                            value: dexLink,
+                            inline: false,
+                          }
+                        )
+                        .setImage(updatedTokenProfile.header)
+                        .setTimestamp()
+                        .setFooter({
+                          text: 'Boost Hunter',
+                          iconURL: updatedTokenProfile.icon,
+                        });
+
+                      botChannel
+                        .send({ embeds: [embed] })
+                        .then(() => console.log("Discord Message Sent!"))
+                        .catch(console.error);
+                  }
+                 /**
+                  * 🔴
+                  * 🔵
+                  * 🟢
+                  */
                 }
               }
             }

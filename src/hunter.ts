@@ -31,6 +31,8 @@ async function initializedDiscord(): Promise<boolean> {
   //check if Discord is enabled
   if (!config.discord.enabled) {
     console.log("❌ Discord intergration is disbled in the config.");
+    const welcome = `🚀 Hunter is now running`;
+    botChannel.send(welcome).catch(console.error);
     return true;
   }
 
